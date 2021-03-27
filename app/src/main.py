@@ -9,7 +9,9 @@ from tqdm import tqdm
 from itertools import product, chain, combinations
 import traceback
 from multiprocessing.pool import ThreadPool
-from util import file_reader, jsonp_reader
+from util import generate_multi_generator
+
+from defines import TRAIN_DIR, N_CORES, DEBUG_MODE
 
 from khaiii import KhaiiiApi, KhaiiiWord
 from konlpy.tag import Mecab
@@ -17,12 +19,11 @@ from konlpy.tag import Mecab
 from tokenizers import Tokenizer
 from tokenizers.trainers import BpeTrainer, WordPieceTrainer
 from tokenizers.models import BPE, WordPiece
-from tokenizers.pre_tokenizers import Whitespace, BertPreTokenizer, CharDelimiterSplit
-
-TRAIN_DIR = os.path.join(os.path.dirname(os.getcwd()), "trainset")
-
-n_cores = 12
-debug_mode = False
+from tokenizers.pre_tokenizers import (
+    Whitespace,
+    BertPreTokenizer,
+    CharDelimiterSplit,
+)
 
 
 def generate_trainset(dataset_dir: str, sample_rate: float):
@@ -36,8 +37,7 @@ def generate_trainset(dataset_dir: str, sample_rate: float):
     """
     train_dir = TRAIN_DIR
     current_dir = os.getcwd()
-    # p = multiprocessing.Pool(n_cores)
-    pool = ThreadPool(n_cores)
+    pool = ThreadPool(N_CORES)
     data_path = os.path.join(current_dir, dataset_dir)
 
     try:
@@ -55,7 +55,7 @@ def generate_trainset(dataset_dir: str, sample_rate: float):
         pool.close()
         pool.join()
 
-        if debug_mode:
+        if DEBUG_MODE:
             for result in results:
                 out = result.get()
                 print(f"out:{out}")
@@ -68,39 +68,6 @@ def generate_trainset(dataset_dir: str, sample_rate: float):
         print(e)
         return False
     return True
-
-
-def list_to_iterables(data_list):
-    for sub_gen in data_list:
-        for element in sub_gen:
-            # print((element))
-            yield element
-
-
-def generate_multi_generator(**kwargs):
-    # train_dir
-    # current_dir = os.getcwd()
-    # base_dir = os.path.join(current_dir, train_dir)
-    fr = file_reader
-    if "file_type" in kwargs:
-        file_type = kwargs["file_type"]
-    else:
-        file_type = "txt"
-
-    if file_type == "json":
-        if "key" not in kwargs:
-            raise ValueError("must have key parameter")
-        else:
-            fr = jsonp_reader
-
-    base_dir = TRAIN_DIR
-
-    readers = [
-        fr(file_name=os.path.join(base_dir, file_name), **kwargs)
-        for file_name in os.listdir(base_dir)
-    ]
-
-    return list_to_iterables(readers)
 
 
 def get_args():
@@ -129,9 +96,17 @@ def get_args():
 
 
 def get_pretokenize_generator(morpheme_func):
-    #  = None
+    """[summary]
+
+    Arguments:
+        morpheme_func {[class.function]} -- [한국어 형태소 분석기 분석 함수]
+
+    Yields:
+        Iterator[line] -- [file에서 읽은 한 줄을 형태소 분석한 결과를 내보냄]
+    """
+
     readers = generate_multi_generator(file_type="json", key="text")
-    count = 0
+    # count = 0
 
     for line in readers:
         # count = count + 1
@@ -166,10 +141,13 @@ def train_tokenizer(args):
         mecab = Mecab()
         morpheme_func = mecab.morphs
 
+    morpheme_func = None
+
     # tokenizer-type", type=str, choices=["bbpe", "cbpe", "wp"], default="bbpe"
     if args.tokenizer_type == "bbpe":
+        # tokenizer = BytelevelBPETokenizer()
         tokenizer = Tokenizer(BPE())
-        tokenizer.pre_tokenizer = BertPreTokenizer()
+        # tokenizer.pre_tokenizer = BertPreTokenizer()
         trainer = BpeTrainer(
             special_tokens=args.special_tokens,
             vocab_size=args.vocab_size,
@@ -193,16 +171,15 @@ def train_tokenizer(args):
         )
 
     # tokenizer.train()
-    tokenizer.train_from_iterator(
-        get_pretokenize_generator(morpheme_func), trainer=trainer
-    )
-    tokenizer.save("./vocab.bin")
+    tokenizer.train_from_iterator(get_pretokenize_generator(morpheme_func))
+    tokenizer.save("./vocab.txt")
     test_string = "안녕하세요 이것은 테스트입니다"
     output = tokenizer.encode(test_string)
-    print(output)
-    print(output.tokens)
-    print(output.type_ids)
-    print(output.offsets)
+    print(f"output:{output}")
+    print(f"tokens:{output.tokens}")
+    print(f"ids   :{output.ids}")
+    print(f"offset:{output.offsets}")
+    print(f"decode:{tokenizer.decode(output.ids)}")
 
 
 def main():
