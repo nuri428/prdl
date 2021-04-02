@@ -9,7 +9,7 @@ from tqdm import tqdm
 from itertools import product, chain, combinations
 import traceback
 from multiprocessing.pool import ThreadPool
-from util import generate_multi_generator
+from util import generate_multi_generator, get_list_file
 
 from defines import TRAIN_DIR, N_CORES, DEBUG_MODE
 
@@ -24,6 +24,10 @@ from tokenizers.pre_tokenizers import (
     BertPreTokenizer,
     CharDelimiterSplit,
 )
+
+from transfomers import BertModel, BertConfig, TFBertForMaskedLM
+
+pretrained_model = "bert-base-multilingual-cased"
 
 
 def generate_trainset(dataset_dir: str, sample_rate: float):
@@ -41,8 +45,19 @@ def generate_trainset(dataset_dir: str, sample_rate: float):
     data_path = os.path.join(current_dir, dataset_dir)
 
     try:
-        file_list = os.listdir(data_path)
-        print(f"file_list count : {len(file_list)}")
+        # for subdirecoty system
+        file_list = []
+        for subdir, dirs, files, in os.walk(data_path):
+            for file_name in files:
+                file_list.append(file_name)
+
+            for dir_name in dirs:
+                sub_files = get_list_file(os.path.join(subdir, dir_name))
+                if len(sub_files) > 0:
+                    for file_name in sub_files:
+                        file_list.append(os.path.join(dir_name, file_name))
+
+        print(f"sampling file_list count : {len(file_list)}")
         target_path = os.path.join(current_dir, train_dir)
 
         results = [
@@ -85,7 +100,7 @@ def get_args():
         "--pretokenizer-type", type=str, choices=["khaiii", "mecab"], default="khaiii"
     )
     parser.add_argument(
-        "--tokenizer-type", type=str, choices=["bbpe", "cbpe", "wp"], default="bbpe"
+        "--tokenizer-type", type=str, choices=["bbpe", "cbpe", "wp"], default="bbpe",
     )
     parser.add_argument("--vocab-size", default=10000)
     parser.add_argument("--min-frequency", default=2),
@@ -108,10 +123,7 @@ def get_pretokenize_generator(morpheme_func):
     readers = generate_multi_generator(file_type="json", key="text")
     # count = 0
 
-    for line in readers:
-        # count = count + 1
-        # if count > 10:
-        #     break
+    for line in readers:        
 
         if morpheme_func:
             line = morpheme_func(line)
@@ -161,9 +173,9 @@ def train_tokenizer(args):
             vocab_size=args.vocab_size,
             min_frequency=args.min_frequency,
         )
-    elif agrs.tokenizer_type == "wp":
+    elif args.tokenizer_type == "wp":
         tokenizer = Tokenizer(WordPiece())
-        tokenizer.pre_tokenizer = Whitespace
+        # tokenizer.pre_tokenizer = Whitespace
         trainer = WordPieceTrainer(
             special_tokens=args.special_tokens,
             vocab_size=args.vocab_size,
@@ -172,8 +184,9 @@ def train_tokenizer(args):
 
     # tokenizer.train()
     tokenizer.train_from_iterator(get_pretokenize_generator(morpheme_func))
-    tokenizer.save("./vocab.txt")
-    test_string = "안녕하세요 이것은 테스트입니다"
+
+    tokenizer.save(f"../vocab/{args.tokenizer_type}.vocab")
+    test_string = "안녕하세요 이것은 테스트입니다. 구름은 하늘에 떠 있고 우리는 여기있어"
     output = tokenizer.encode(test_string)
     print(f"output:{output}")
     print(f"tokens:{output.tokens}")
@@ -183,18 +196,27 @@ def train_tokenizer(args):
 
 
 def main():
-    """[summary]
-    메인 함수
-    """
-    args = get_args()
-    print(args)
+    # """[summary]
+    # 메인 함수
+    # """
+    # args = get_args()
+    # print(args)
 
-    # trainset 생성
-    generate_trainset(args.data_path, args.sample_rate)
+    # # trainset 생성
+    # generate_trainset(args.data_path, args.sample_rate)
 
-    print("sampling complete")
+    # print("sampling complete")
 
-    train_tokenizer(args)
+    # train_tokenizer(args)
+
+    pre_traied_model = "bert-base-multilingual-cased"
+    config = BertConfig.from_pretrained(pre_traied_model)
+    model = TFBertForMaskedLM.from_pretrained(pretrained_model, config=config)
+    model.compile(
+        optimizer=tf.optimizer.Adam(lr=params["learning_rate"]),
+        loss="binary_cross_entropy",
+    )
+    print(model.summary())
 
 
 if __name__ == "__main__":

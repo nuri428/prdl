@@ -2,6 +2,7 @@
 
 from defines import TRAIN_DIR
 import os
+import re
 
 
 def file_reader(file_name: str, **kwargs):
@@ -15,8 +16,9 @@ def file_reader(file_name: str, **kwargs):
     """
 
     # print(f"file name : {file_name}")
-    for row in open(file_name, "r", encoding="utf-8"):
-        yield row
+    for line in open(file_name, "r", encoding="utf-8"):
+        line = re.sub(r"[\u4e00-\u9fff]+", "", line)
+        yield line
 
 
 def jsonp_reader(file_name: str, **kwargs):
@@ -33,7 +35,15 @@ def jsonp_reader(file_name: str, **kwargs):
 
     for row in open(file_name, "r", encoding="utf-8"):
         line = json.loads(row)
-        yield line[kwargs["key"]]
+        line = line[kwargs["key"]]
+        # remove hanja
+        line = re.sub(r"[\u4e00-\u9fff]+", "", line)
+        yield line
+
+
+def get_list_file(dir_path: str) -> list:
+    file_list = os.listdir(dir_path)
+    return file_list
 
 
 def generate_multi_generator(**kwargs):
@@ -59,9 +69,22 @@ def generate_multi_generator(**kwargs):
 
     base_dir = TRAIN_DIR
 
+    file_list = []
+    for root, dirs, files in os.walk(base_dir):
+        for file_name in files:
+            file_list.append(os.path.join(root, file_name))
+        for dir_name in dirs:
+            sub_file_names = get_list_file(os.path.join(root, dir_name))
+            for file_name in sub_file_names:
+                file_list.append(os.path.join(root, dir_name, file_name))
+
+    print(f"file list count : {len(file_list)}")
+
     readers = [
-        fr(file_name=os.path.join(base_dir, file_name), **kwargs)
-        for file_name in os.listdir(base_dir)
+        jsonp_reader(file_name=os.path.join(base_dir, file_name), key="text")
+        if file_name.endswith(".json")
+        else file_reader(file_name=os.path.join(base_dir, file_name), **kwargs)
+        for file_name in file_list
     ]
 
     return list_to_iterables(readers)

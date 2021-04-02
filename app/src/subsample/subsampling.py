@@ -33,9 +33,16 @@ def gen_trainset(
     source = os.path.join(source_path, dataset_file)
     target = os.path.join(target_path, dataset_file)
 
-    # print(f"{source}->{target}")
+    # 타켓 디렉토리가 있는지 여부 확인
+    dir_name = os.path.dirname(target)
+    # print(dir_name)
 
-    # checo source file exists
+    if not os.path.exists(dir_name):
+        os.makedirs(dir_name)
+
+    # print(f"{source} -> {target}")
+
+    # check source file exists
     if not os.path.isfile(source):
         raise Exception(f"file {source} not exists")
 
@@ -48,9 +55,6 @@ def gen_trainset(
     # calc sample count
     ratio_count = int(file_count * ((sample_ratio * 100) / 100))
 
-    # print(f"file count :{file_count}")
-    # print(f"ratio count :{ratio_count}")
-
     awk_cmd = (
         "awk 'BEGIN{srand()} {print rand(), $0}' "
         + source
@@ -62,16 +66,9 @@ def gen_trainset(
         + target
     )
 
-    # print(awk_sub_cmd)
-
-    # sampling_output = subprocess.Popen(awk_cmd)
-
     sampling_output = subprocess.Popen(
         awk_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, shell=True
     )
-
-    # print(f"sampleing outut={sampling_output}")
-    # return True
     return sampling_output
 
 
@@ -79,7 +76,8 @@ if __name__ == "__main__":
     gen_trainset(
         "/home/nuri/sources/git/prdl/app/datasets/",
         # "part-19715-b96bfb62-0215-41ea-84ec-cd7ef44fd4ba-c000.txt",
-        "all.txt",
+        # "all.txt",
+        "wiki/3.txt",
         "/home/nuri/sources/git/prdl/app/trainset/",
         sample_ratio=1,
     )
