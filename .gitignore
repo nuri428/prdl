@@ -137,3 +137,4 @@ app/trainset/*
 
 app/src/vocab.*
 app/vocab/*
+app/src/outputs/*
