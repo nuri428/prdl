@@ -5,6 +5,14 @@ import os
 import re
 
 
+def omegalist_to_list(omegalist):  
+    if type(omegalist)==int:
+        return omegalist
+    l = []
+    for i in range(len(omegalist)):
+            l.append(omegalist[i])
+    return l
+
 def file_reader(file_name: str, **kwargs):
     """[summary]
 

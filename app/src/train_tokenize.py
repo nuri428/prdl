@@ -9,7 +9,7 @@ from tqdm import tqdm
 from itertools import product, chain, combinations
 import traceback
 from multiprocessing.pool import ThreadPool
-from util import generate_multi_generator, get_list_file
+from util import generate_multi_generator, get_list_file, omegalist_to_list
 
 from defines import TRAIN_DIR, N_CORES, DEBUG_MODE
 
@@ -25,6 +25,29 @@ from tokenizers.pre_tokenizers import (
     CharDelimiterSplit,
 )
 
+from pathlib import Path
+from datasets import load_dataset
+import hydra
+from omegaconf import OmegaConf
+
+def get_datasets(dataset_dir:str):
+    current_dir = Path(os.getcwd())
+    data_path = current_dir / dataset_dir
+
+    file_list = []
+    for subdir, dirs, files, in os.walk(data_path):
+        for file_name in files:
+            file_list.append(file_name)
+
+        for dir_name in dirs:
+            sub_files = get_list_file(os.path.join(subdir, dir_name))
+            if len(sub_files) > 0:
+                for file_name in sub_files:
+                    file_list.append(os.path.join(dir_name, file_name))
+    print("filelist count : {len(file_list)}")
+    dataset = load_dataset(file_list)
+    return dataset
+
 
 def generate_trainset(dataset_dir: str, sample_rate: float):
     """[summary]
@@ -36,9 +59,10 @@ def generate_trainset(dataset_dir: str, sample_rate: float):
         boolean -- [동작 실행 결과]
     """
     train_dir = TRAIN_DIR
-    current_dir = os.getcwd()
+    # current_dir = os.getcwd()
+    current_dir = Path(os.getcwd())
     pool = ThreadPool(N_CORES)
-    data_path = os.path.join(current_dir, dataset_dir)
+    data_path = (current_dir / dataset_dir)
 
     try:
         # for subdirecoty system
@@ -91,7 +115,7 @@ def get_args():
     """set CLI arguments"""
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-path", type=str, default="../datasets/")
-    parser.add_argument("--sample-rate", type=float, default=1)
+    parser.add_argument("--sample-rate", type=float, default=0.1)
     parser.add_argument(
         "--pretokenizer-type", type=str, choices=["khaiii", "mecab"], default="khaiii"
     )
@@ -143,47 +167,43 @@ def train_tokenizer(args):
     # Tokenizer train
     morpheme_func = None
 
-    if args.pretokenizer_type == "khaiii":
+    if args.tokenizer.pretokenizer_type == "khaiii":
         api = KhaiiiApi()
         morpheme_func = api.analyze
-    elif args.pretokenizer_type == "mecab":
+    elif args.tokenizer.pretokenizer_type == "mecab":
         mecab = Mecab()
         morpheme_func = mecab.morphs    
 
     # tokenizer-type", type=str, choices=["bbpe", "cbpe", "wp"], default="bbpe"
-    if args.tokenizer_type == "bbpe":
+    if args.tokenizer.tokenizer_type == "bbpe":
         # tokenizer = BytelevelBPETokenizer()
         tokenizer = Tokenizer(BPE())
         # tokenizer.pre_tokenizer = BertPreTokenizer()
         trainer = BpeTrainer(
-            special_tokens=args.special_tokens,
-            vocab_size=args.vocab_size,
-            min_frequency=args.min_frequency,
+            special_tokens=omegalist_to_list(args.tokenizer.special_tokens),
+            vocab_size=args.tokenizer.vocab_size,
+            min_frequency=args.tokenizer.min_frequency,
         )
-    elif args.tokenizer_type == "cbpe":
+    elif args.tokenizer.tokenizer_type == "cbpe":
         tokenizer = Tokenizer(BPE())
         tokenizer.pre_tokenizer = CharDelimiterSplit
         trainer = BpeTrainer(
-            special_tokens=args.special_tokens,
-            vocab_size=args.vocab_size,
-            min_frequency=args.min_frequency,
+            special_tokens=omegalist_to_list(args.tokenizer.special_tokens),
+            vocab_size=args.tokenizer.vocab_size,
+            min_frequency=args.tokenizer.min_frequency,
         )
-    elif args.tokenizer_type == "wp":
+    elif args.tokenizer.tokenizer_type == "wp":
         tokenizer = Tokenizer(WordPiece())
         # tokenizer.pre_tokenizer = Whitespace
         trainer = WordPieceTrainer(
-            special_tokens=args.special_tokens,
-            vocab_size=args.vocab_size,
-            min_frequency=args.min_frequency,
+            special_tokens=omegalist_to_list(args.tokenizer.special_tokens),
+            vocab_size=args.tokenizer.vocab_size,
+            min_frequency=args.tokenizer.min_frequency,
         )    
 
-    tokenizer.train()
-    # readers = generate_multi_generator(file_type="json", key="text")
-    # for line in readers :
-    #     print(line)
     tokenizer.train_from_iterator(get_pretokenize_generator(morpheme_func))
 
-    tokenizer.save(f"../vocab/{args.tokenizer_type}.vocab")
+    tokenizer.save(f"../vocab/{args.tokenizer.tokenizer_type}.vocab")
     test_string = "안녕하세요 이것은 테스트입니다. 구름은 하늘에 떠 있고 우리는 여기있어"
     output = tokenizer.encode(test_string)
     print(f"output:{output}")
@@ -192,16 +212,23 @@ def train_tokenizer(args):
     print(f"offset:{output.offsets}")
     print(f"decode:{tokenizer.decode(output.ids)}")
 
+    datasets = get_datasets(args.tokenizer.data_path)
 
-def main():
+    for line in datasets :
+        print(line)
+        break
+
+@hydra.main(config_name='./config.yaml')
+def main(args):
+    
     """[summary]
     메인 함수
     """
-    args = get_args()
+    # args = get_args()
     print(args)
 
     # trainset 생성
-    generate_trainset(args.data_path, args.sample_rate)
+    generate_trainset(args.tokenizer.data_path, args.tokenizer.sample_rate)
 
     print("sampling complete")
 

@@ -1,0 +1,8 @@
+tokenizer:
+  data_path: ../datasets/wiki
+  sample_rate: 0.1
+  pretokenizer_type: khaiii
+  tokenizer_type: bbpe
+  vocab_size: 10000
+  min_frequency: 2
+  special_tokens: ''

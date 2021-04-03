@@ -1,0 +1,13 @@
+tokenizer:
+  data-path: ../datasets/wiki
+  sample-rate: 0.1
+  pretokenizer-type:
+  - khaiii
+  - mecab
+  tokenizer-type:
+  - bbpe
+  - cbpe
+  - wp
+  vocab-size: 10000
+  min-frequency: 2
+  special-tokens: []

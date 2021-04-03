@@ -136,3 +136,4 @@ app/datasets/*
 app/trainset/*
 
 app/src/vocab.*
+app/vocab/*
